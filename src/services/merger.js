@@ -540,11 +540,11 @@ elif preset == 'pro_ranking':
     accent_glow = (accent_rgba[0], accent_rgba[1], accent_rgba[2], 60)
 
     # ── Font sizes ───────────────────────────────────────────────────
-    pro_gt_size   = 46
-    pro_num_size  = 54
-    pro_act_size  = 62
-    pro_ttl_size  = 28
-    pro_act_ttl_size = 34
+    pro_gt_size   = 40
+    pro_num_size  = 42
+    pro_act_size  = 50
+    pro_ttl_size  = 22
+    pro_act_ttl_size = 28
 
     pro_num_font     = ImageFont.truetype(font_path, pro_num_size,     layout_engine=layout)
     pro_act_num_font = ImageFont.truetype(font_path, pro_act_size,     layout_engine=layout)
@@ -614,13 +614,13 @@ elif preset == 'pro_ranking':
     title_bottom_y = strip_bottom + 12
 
     # ── Rank rows ────────────────────────────────────────────────────
-    THUMB_W   = 72          # 9:16 ratio → 72x128
+    THUMB_W   = 72
     THUMB_H   = 128
-    THUMB_R   = 6           # slight corner rounding only
+    THUMB_R   = 6
     ROW_PAD_X = 16
-    ROW_H_ACTIVE = 148
-    ROW_H_NORMAL = 96
-    GAP          = 8
+    ROW_H_ACTIVE = 118
+    ROW_H_NORMAL = 78
+    GAP          = 6
 
     # compute total height needed
     total_row_h = 0
@@ -637,21 +637,15 @@ elif preset == 'pro_ranking':
         color_idx  = (rank-1) % len(list_colors)
         rank_color = list_colors[color_idx]
 
-        # Row background
-        row_bg_alpha = 160 if is_active else 90
-        row_bg_color = (accent_rgba[0], accent_rgba[1], accent_rgba[2], 40) if is_active else (0,0,0, row_bg_alpha)
-        row_rect = [(ROW_PAD_X, cy_row), (W - ROW_PAD_X, cy_row + row_h)]
-
-        # draw row bg
+        # Row background — only active row gets highlight
         row_layer = Image.new('RGBA', (W, H), (0,0,0,0))
         row_draw  = ImageDraw.Draw(row_layer)
-        row_draw.rounded_rectangle(
-            [ROW_PAD_X, cy_row, W-ROW_PAD_X, cy_row+row_h],
-            radius=18,
-            fill=row_bg_color
-        )
         if is_active:
-            # accent left border glow
+            row_draw.rounded_rectangle(
+                [ROW_PAD_X, cy_row, W-ROW_PAD_X, cy_row+row_h],
+                radius=18,
+                fill=(accent_rgba[0], accent_rgba[1], accent_rgba[2], 40)
+            )
             row_draw.rounded_rectangle(
                 [ROW_PAD_X, cy_row, ROW_PAD_X+6, cy_row+row_h],
                 radius=4, fill=(accent_rgba[0], accent_rgba[1], accent_rgba[2], 230)
