@@ -1,73 +1,46 @@
-FROM node:22-slim
+# ---- 阶段 1: 构建器 (Builder) ----
+# 使用一个功能完整的镜像，它包含编译工具或可以轻松安装它们
+FROM python:3.12-bullseye as builder
 
-# ─── System deps ─────────────────────────────────────────────────
+# 安装编译 uvloop 和 httptools 所需的系统依赖 (C编译器等)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-  ffmpeg python3 python3-pip python3-dev git curl wget unzip ca-certificates \
-  fonts-dejavu-core fonts-noto fonts-beng fonts-beng-extra fonts-noto-color-emoji \
-  fonts-freefont-ttf fontconfig \
-  libraqm0 libraqm-dev libfreetype6 libfreetype6-dev libharfbuzz0b libharfbuzz-dev \
-  libfribidi0 libfribidi-dev libjpeg-dev zlib1g-dev libpng-dev build-essential \
-  && rm -rf /var/lib/apt/lists/* \
-  && fc-cache -f
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
-# ─── Pip: Pillow (source + raqm), yt-dlp, instaloader ────────────
-RUN pip install --break-system-packages --no-cache-dir -U \
-  setuptools wheel cmake ninja pybind11 \
-  && pip install --break-system-packages --no-cache-dir --no-binary Pillow --force-reinstall Pillow \
-  && pip install --break-system-packages --no-cache-dir -U \
-  "yt-dlp[default]" instaloader \
-  && yt-dlp --version \
-  && instaloader --version \
-  && python3 -c "from PIL import features; raqm=features.check('raqm'); fribidi=features.check('fribidi'); print('raqm=', raqm, 'fribidi=', fribidi)" \
-  && python3 -c "from PIL import Image, ImageDraw, ImageFont; f=ImageFont.truetype('/usr/share/fonts/truetype/freefont/FreeSans.ttf',20); print('Pillow OK')"
-
-# ─── KS-Downloader (captcha-resistant Kuaishou downloader) ───────
-COPY ks-downloader /app/ks-downloader
-RUN pip install --break-system-packages --no-cache-dir \
-  httpx[socks] aiofiles aiosqlite lxml pyyaml rich uvicorn fastapi emoji \
-  && echo "KS-Downloader installed"
-
-# ─── Deno (for YouTube JS challenge bypass) ──────────────────────
-RUN curl -fsSL https://deno.land/install.sh | sh \
-  && mv /root/.deno/bin/deno /usr/local/bin/deno \
-  && deno --version
-
-# ─── Xray-core ───────────────────────────────────────────────────
-RUN ARCH=$(dpkg --print-architecture) \
-  && if [ "$ARCH" = "amd64" ]; then XARCH="64"; else XARCH="arm64-v8a"; fi \
-  && wget -q "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${XARCH}.zip" -O /tmp/xray.zip \
-  && unzip -q /tmp/xray.zip -d /tmp/xray \
-  && mv /tmp/xray/xray /usr/local/bin/xray \
-  && chmod +x /usr/local/bin/xray \
-  && rm -rf /tmp/xray.zip /tmp/xray \
-  && xray version || true
-
-# ─── App ─────────────────────────────────────────────────────────
+# 设置工作目录
 WORKDIR /app
-COPY package*.json ./
-RUN npm install --omit=dev
-COPY src ./src
 
-# ─── Dirs ────────────────────────────────────────────────────────
-RUN mkdir -p /app/data/output /app/data/cookies /app/data \
-  /tmp/vmixer /app/ks-downloader/Volume
+# 复制需求文件
+COPY requirements.txt .
 
-ENV PORT=3000 \
-  TEMP_DIR=/tmp/vmixer \
-  OUTPUT_DIR=/app/data/output \
-  COOKIES_FILE=/app/data/cookies/cookies.txt \
-  CONFIG_FILE=/app/data/config.json \
-  NODE_ENV=production
+# 在这个具备编译环境的阶段安装所有 Python 依赖
+# 安装到一个独立的目录 /install 中，以便后续复制
+RUN pip install --no-cache-dir --prefix="/install" -r requirements.txt
 
-EXPOSE 3000
+# ---- 阶段 2: 最终镜像 (Final Image) ----
+# 使用轻量级 slim 镜像作为最终的运行环境
+FROM python:3.12-slim
 
-# ─── Startup: KS-Downloader API background + Node server foreground
-RUN printf '#!/bin/sh\n\
-echo "[startup] Starting KS-Downloader API..."\n\
-cd /app/ks-downloader && python main.py api --host 0.0.0.0 --port 5557 >> /tmp/ks-api.log 2>&1 &\n\
-echo "[startup] KS-Downloader PID=$!"\n\
-echo "[startup] Starting Node server..."\n\
-exec node /app/src/server.js\n' > /app/start.sh \
-  && chmod +x /app/start.sh
+# 设置工作目录
+WORKDIR /app
 
-CMD ["/app/start.sh"]
+# 添加元数据标签
+LABEL name="KS-Downloader" authors="JoeanAmier" repository="https://github.com/JoeanAmier/KS-Downloader"
+
+# 从构建器阶段，将已经安装好的依赖包复制到最终镜像的系统路径中
+COPY --from=builder /install /usr/local
+
+# 复制项目代码和相关文件
+COPY source /app/source
+COPY locale /app/locale
+COPY LICENSE /app/LICENSE
+COPY main.py /app/main.py
+
+# 暴露端口
+EXPOSE 5557
+
+# 创建挂载点
+VOLUME /app/Volume
+
+# 设置容器启动命令
+CMD ["python", "main.py"]
