@@ -243,20 +243,17 @@ for i, ln in enumerate(lines):
 img.save(out_path)
 print('OK', img.size, 'lines=', len(lines), 'final_font=', used_size)
 `;
-const path = require('path');
-const fs   = require('fs');
 
-const FONT_DIR2 = path.join(__dirname, '..', 'public', 'fonts');
-
+// ফন্ট সিলেক্টর ফাংশন (FONT_DIR ব্যবহার করে)
 function pickBengaliFontTR(weight) {
   const fonts = {
     bold: [
-      path.join(FONT_DIR2, 'HindSiliguri-Bold.ttf'),
-      path.join(FONT_DIR2, 'NotoSansBengali-Bold.ttf'),
+      path.join(FONT_DIR, 'HindSiliguri-Bold.ttf'),
+      path.join(FONT_DIR, 'NotoSansBengali-Bold.ttf'),
     ],
     regular: [
-      path.join(FONT_DIR2, 'HindSiliguri-Regular.ttf'),
-      path.join(FONT_DIR2, 'NotoSansBengali-Regular.ttf'),
+      path.join(FONT_DIR, 'HindSiliguri-Regular.ttf'),
+      path.join(FONT_DIR, 'NotoSansBengali-Regular.ttf'),
     ],
   };
   const list = fonts[weight] || fonts.bold;
@@ -294,7 +291,7 @@ function renderTitlePng(opts) {
     align: opts.align || 'center',
   };
 
-  const { spawnSync } = require('child_process');
+  // spawnSync ইতিমধ্যেই উপরে import করা
   const r = spawnSync('python3', ['-c', PY_RENDERER, JSON.stringify(cfg)], { encoding: 'utf8' });
   if (r.status !== 0) throw new Error(`titleRenderer failed: ${r.stderr || r.stdout}`);
   if (!fs.existsSync(opts.outPath)) throw new Error('title PNG not created');
