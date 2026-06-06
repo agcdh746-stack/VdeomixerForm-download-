@@ -985,10 +985,19 @@ async function mergeVideos({ videoFiles, sourcesMeta = [], workDir, jobId, headi
   let thumbnailPaths = [];
   if (ranking && ranking.enabled && ranking.preset === 'pro_ranking') {
     jobLog.info(`🖼️ Extracting thumbnails for Pro Ranking...`);
-    for (let i = 0; i < croppedPaths.length; i++) {
+    const total = croppedPaths.length;
+    // extract thumbnails indexed by clip
+    const rawThumbs = [];
+    for (let i = 0; i < total; i++) {
       const thumbOut = path.join(workDir, `thumb_${i}.jpg`);
       const tp = await extractThumbnail(croppedPaths[i], thumbOut, jobLog);
-      thumbnailPaths.push(tp);
+      rawThumbs.push(tp);
+    }
+    // reorder by rank: thumbnailPaths[rank-1] = clip thumbnail for that rank
+    thumbnailPaths = new Array(total).fill('');
+    for (let i = 0; i < total; i++) {
+      const rank = computeRankForIndex(i, total, ranking);
+      thumbnailPaths[rank - 1] = rawThumbs[i];
     }
   }
 
