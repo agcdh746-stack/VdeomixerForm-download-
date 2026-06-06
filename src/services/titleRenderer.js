@@ -243,3 +243,61 @@ for i, ln in enumerate(lines):
 img.save(out_path)
 print('OK', img.size, 'lines=', len(lines), 'final_font=', used_size)
 `;
+const path = require('path');
+const fs   = require('fs');
+
+const FONT_DIR2 = path.join(__dirname, '..', 'public', 'fonts');
+
+function pickBengaliFontTR(weight) {
+  const fonts = {
+    bold: [
+      path.join(FONT_DIR2, 'HindSiliguri-Bold.ttf'),
+      path.join(FONT_DIR2, 'NotoSansBengali-Bold.ttf'),
+    ],
+    regular: [
+      path.join(FONT_DIR2, 'HindSiliguri-Regular.ttf'),
+      path.join(FONT_DIR2, 'NotoSansBengali-Regular.ttf'),
+    ],
+  };
+  const list = fonts[weight] || fonts.bold;
+  for (const f of list) if (fs.existsSync(f)) return f;
+  return '/usr/share/fonts/truetype/freefont/FreeSans.ttf';
+}
+
+function pickEmojiFontTR() {
+  const candidates = [
+    '/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf',
+    '/usr/share/fonts/noto/NotoColorEmoji.ttf',
+  ];
+  for (const f of candidates) if (fs.existsSync(f)) return f;
+  return null;
+}
+
+function renderTitlePng(opts) {
+  const cfg = {
+    text: opts.text || '',
+    width: opts.width,
+    height: opts.height,
+    font_size: opts.fontSize || 52,
+    min_font_size: opts.minFontSize || 20,
+    max_lines: opts.maxLines || 4,
+    padding_x: opts.paddingX || 28,
+    padding_y: opts.paddingY || 18,
+    line_height_ratio: opts.lineHeightRatio || 1.22,
+    out: opts.outPath,
+    font_path: pickBengaliFontTR(opts.fontWeight || 'bold'),
+    emoji_font_path: opts.emojiFont || pickEmojiFontTR(),
+    fg: opts.fg || [255, 255, 255, 255],
+    bg: opts.bg || [0, 0, 0, 0],
+    shadow: opts.shadow || null,
+    accent_color: opts.accentColor || null,
+    align: opts.align || 'center',
+  };
+
+  const { spawnSync } = require('child_process');
+  const r = spawnSync('python3', ['-c', PY_RENDERER, JSON.stringify(cfg)], { encoding: 'utf8' });
+  if (r.status !== 0) throw new Error(`titleRenderer failed: ${r.stderr || r.stdout}`);
+  if (!fs.existsSync(opts.outPath)) throw new Error('title PNG not created');
+}
+
+module.exports = { renderTitlePng };
