@@ -1,3 +1,4 @@
+```javascript
 'use strict';
 // =====================================================================
 // VideoMixer — FFmpeg Merger Pipeline
@@ -72,7 +73,6 @@ function pickBengaliFont(weight = 'bold') {
     '/usr/share/fonts/truetype/noto/NotoSansBengali-Regular.ttf',
   ];
   for (const c of candidates) if (fs.existsSync(c)) return c;
-  // fallback: let ffmpeg/pillow use default — avoid crash
   const sys = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
   if (fs.existsSync(sys)) return sys;
   throw new Error('No Bengali font available');
@@ -189,15 +189,14 @@ async function addHeading(inputPath, outputPath, heading, jobLog) {
   const platform = (typeof heading === 'object' && heading?.platform) || 'youtube';
 
   // Safe zone top padding per platform (720×1280 canvas, scaled from 1080×1920)
-  // Values = top px where heading won't be covered by platform UI
   const platformSafeTop = {
-    tiktok:    107,  // TikTok: ~160px on 1080w → 107 on 720w
-    instagram: 147,  // Instagram Reels: ~220px → 147
-    facebook:  147,  // Facebook Reels: same as Instagram
-    youtube:   253,  // YouTube Shorts: ~380px → 253 (most restrictive)
+    tiktok:    107,
+    instagram: 147,
+    facebook:  147,
+    youtube:   253,
   };
   const platformSafeBottom = {
-    tiktok:    320,  // bottom UI height on 720w canvas
+    tiktok:    320,
     instagram: 280,
     facebook:  280,
     youtube:   253,
@@ -217,8 +216,7 @@ async function addHeading(inputPath, outputPath, heading, jobLog) {
   const canvasH = Math.max(120, Math.min(260, Math.round(fontSize * 3.8)));
 
   try {
-    // heading opts from UI
-    const showBg      = heading?.showBg !== false;  // default true
+    const showBg      = heading?.showBg !== false;
     const accentHex   = heading?.accentColor || null;
     const accentColor = accentHex ? hexToRgba(accentHex) : null;
 
@@ -261,7 +259,7 @@ async function addHeading(inputPath, outputPath, heading, jobLog) {
   }
 }
 
-// ─── Python Ranking Renderer (UPDATED WITH SMALLER FONTS & OUTLINE) ───
+// ─── Python Ranking Renderer (FIXED: smaller fonts, outline, pro mode with thumbnails) ───
 const PY_RANKING_RENDERER = String.raw`
 import sys, json, unicodedata
 from PIL import Image, ImageDraw, ImageFont
@@ -284,7 +282,8 @@ def hex_to_rgba(h):
         r,g,b = int(h[0:2],16), int(h[2:4],16), int(h[4:6],16)
         return (r,g,b,255)
     except Exception:
-        return (34,197,94,255)  # fallback green
+        return (34,197,94,255)
+
 emoji_font_path = cfg.get('emoji_font_path')
 
 def _detect_layout(fp):
@@ -309,7 +308,7 @@ emoji_layout = ImageFont.Layout.BASIC if hasattr(ImageFont, 'Layout') else (Imag
 img = Image.new('RGBA', (W, H), (0, 0, 0, 0))
 draw = ImageDraw.Draw(img)
 
-# সাইজ ছোট এবং কম্প্যাক্ট করা হয়েছে
+# Font sizes
 num_size = 50
 active_num_size = 60
 small_num_size = 50
@@ -348,7 +347,6 @@ def is_emoji(ch):
         return False
 
 def render_emoji_to_img(seq, target_size, emoji_font_obj):
-    """ইমোজি ফিক্স: embedded_color=True ব্যবহার করা হয়েছে যাতে সাদা না হয়ে কালার আসে"""
     try:
         kwargs = {'embedded_color': True} if hasattr(ImageFont, 'Layout') else {}
         tmp_d = ImageDraw.Draw(Image.new('RGBA',(10,10)))
@@ -369,7 +367,6 @@ def render_emoji_to_img(seq, target_size, emoji_font_obj):
         return None, 0
 
 def draw_text_with_outline(draw, cx, y, seq, font, fill):
-    """ব্যাকগ্রাউন্ড বক্সের বদলে ৩ পিক্সেলের স্ট্রং কালো আউটলাইন স্ট্রোক"""
     stroke_width = 3
     for dx in range(-stroke_width, stroke_width + 1):
         for dy in range(-stroke_width, stroke_width + 1):
@@ -452,13 +449,13 @@ def render_global_title(draw, text, max_w, start_font_size, min_size, y_start, e
 
 white = (255, 255, 255, 255)
 list_colors = [
-    (255, 72, 72, 255),   # Red
-    (255, 165, 0, 255),   # Orange
-    (255, 215, 0, 255),   # Yellow
-    (0, 191, 255, 255),   # Blue
-    (50, 205, 50, 255),   # Green
-    (255, 105, 180, 255), # Hot Pink
-    (147, 112, 219, 255)  # Purple
+    (255, 72, 72, 255),
+    (255, 165, 0, 255),
+    (255, 215, 0, 255),
+    (0, 191, 255, 255),
+    (50, 205, 50, 255),
+    (255, 105, 180, 255),
+    (147, 112, 219, 255)
 ]
 
 title_bottom_y = 0
@@ -468,7 +465,6 @@ if global_title:
     max_text_w = W - pad_x * 2
     accent_rgba = hex_to_rgba(accent_color_hex)
 
-    # "|" দিয়ে split — part1 সাদা, part2 accent color
     if '|' in global_title:
         part1, part2 = global_title.split('|', 1)
         part1 = part1.strip()
@@ -477,7 +473,6 @@ if global_title:
         part1 = global_title
         part2 = None
 
-    # Font size একবারই calculate করি — দুই part একই size পাবে
     gt_font, gt_ef, _, gt_lh, _ = render_global_title(
         draw, global_title.replace('|', ' '), max_text_w, global_title_size, 26, pad_y, emoji_font
     )
@@ -509,7 +504,7 @@ if preset == 'current_badge':
         for line in lines:
             draw_text_with_emoji(draw, 165, ty, line, badge_title_font, badge_emoji_font, white, use_outline=True)
             ty += 56
-else:
+elif preset == 'left_list':
     list_top = title_bottom_y + 14
     start_y = list_top + (110 if total_ranks <= 5 else 90)
     gap = 75 if total_ranks <= 5 else 60
@@ -541,17 +536,14 @@ else:
 
 elif preset == 'pro_ranking':
     # ── Pro Ranking Overlay ──────────────────────────────────────────
-    # thumbnail_paths: list of image paths, one per rank (may be empty strings)
     thumbnail_paths = cfg.get('thumbnail_paths') or []
 
-    # ── Helper: rounded rectangle mask ──────────────────────────────
     def make_rounded_mask(size, radius):
         mask = Image.new('L', size, 0)
         md = ImageDraw.Draw(mask)
         md.rounded_rectangle([(0,0),(size[0]-1,size[1]-1)], radius=radius, fill=255)
         return mask
 
-    # ── Helper: vertical gradient fill ──────────────────────────────
     def draw_gradient_rect(target_img, x0, y0, x1, y1, color_top, color_bot):
         h = max(1, y1 - y0)
         w = max(1, x1 - x0)
@@ -569,7 +561,6 @@ elif preset == 'pro_ranking':
     accent_rgba = hex_to_rgba(accent_color_hex)
     accent_glow = (accent_rgba[0], accent_rgba[1], accent_rgba[2], 60)
 
-    # ── Font sizes ───────────────────────────────────────────────────
     pro_gt_size   = 46
     pro_num_size  = 54
     pro_act_size  = 62
@@ -581,7 +572,6 @@ elif preset == 'pro_ranking':
     pro_ttl_font     = ImageFont.truetype(font_path, pro_ttl_size,     layout_engine=layout)
     pro_act_ttl_font = ImageFont.truetype(font_path, pro_act_ttl_size, layout_engine=layout)
 
-    # ── Global title with dark gradient strip ────────────────────────
     gt_pad_x  = 30
     gt_pad_y  = 120
     gt_max_w  = W - gt_pad_x * 2
@@ -615,7 +605,6 @@ elif preset == 'pro_ranking':
     if gt_p2:
         gt_parts.append((gt_p2, accent_rgba))
 
-    # measure total title height
     all_gt_lines = []
     for pt, _ in gt_parts:
         all_gt_lines += wrap_text_px(pt, gt_font, gt_max_w)[:3]
@@ -624,7 +613,6 @@ elif preset == 'pro_ranking':
     strip_pad = 22
     strip_top    = gt_pad_y - strip_pad
     strip_bottom = gt_pad_y + gt_total_h + strip_pad + 10
-    # draw dark gradient strip behind title
     draw_gradient_rect(img, 0, strip_top, W, strip_bottom,
                        (0,0,0,185), (0,0,0,120))
 
@@ -643,16 +631,14 @@ elif preset == 'pro_ranking':
 
     title_bottom_y = strip_bottom + 12
 
-    # ── Rank rows ────────────────────────────────────────────────────
-    THUMB_W   = 72          # 9:16 ratio → 72x128
+    THUMB_W   = 72
     THUMB_H   = 128
-    THUMB_R   = 6           # slight corner rounding only
+    THUMB_R   = 6
     ROW_PAD_X = 16
     ROW_H_ACTIVE = 148
     ROW_H_NORMAL = 96
     GAP          = 8
 
-    # compute total height needed
     total_row_h = 0
     for r_ in range(1, total_ranks+1):
         total_row_h += (ROW_H_ACTIVE if r_ == current_rank else ROW_H_NORMAL) + GAP
@@ -667,12 +653,10 @@ elif preset == 'pro_ranking':
         color_idx  = (rank-1) % len(list_colors)
         rank_color = list_colors[color_idx]
 
-        # Row background
         row_bg_alpha = 160 if is_active else 90
         row_bg_color = (accent_rgba[0], accent_rgba[1], accent_rgba[2], 40) if is_active else (0,0,0, row_bg_alpha)
         row_rect = [(ROW_PAD_X, cy_row), (W - ROW_PAD_X, cy_row + row_h)]
 
-        # draw row bg
         row_layer = Image.new('RGBA', (W, H), (0,0,0,0))
         row_draw  = ImageDraw.Draw(row_layer)
         row_draw.rounded_rectangle(
@@ -681,7 +665,6 @@ elif preset == 'pro_ranking':
             fill=row_bg_color
         )
         if is_active:
-            # accent left border glow
             row_draw.rounded_rectangle(
                 [ROW_PAD_X, cy_row, ROW_PAD_X+6, cy_row+row_h],
                 radius=4, fill=(accent_rgba[0], accent_rgba[1], accent_rgba[2], 230)
@@ -690,17 +673,15 @@ elif preset == 'pro_ranking':
 
         row_draw2 = ImageDraw.Draw(img)
 
-        # ── Thumbnail ────────────────────────────────────────────────
         thumb_x = ROW_PAD_X + 10
         thumb_y = cy_row + (row_h - THUMB_H) // 2
-        # clamp so thumb doesn't go above row
         thumb_y = max(cy_row + 4, thumb_y)
         thumb_path = thumbnail_paths[rank-1] if rank-1 < len(thumbnail_paths) else ''
-        if thumb_path:
+        if thumb_path and os.path.exists(thumb_path):
             try:
+                import os
                 resample_m = Image.Resampling.LANCZOS if hasattr(Image,'Resampling') else Image.LANCZOS
                 th_img = Image.open(thumb_path).convert('RGBA')
-                # force 9:16 crop from center
                 tw, th_orig = th_img.size
                 target_ratio = THUMB_W / THUMB_H
                 src_ratio = tw / th_orig
@@ -715,7 +696,6 @@ elif preset == 'pro_ranking':
                 th_img = th_img.resize((THUMB_W, THUMB_H), resample_m)
                 mask_th = make_rounded_mask((THUMB_W, THUMB_H), THUMB_R)
                 img.paste(th_img, (thumb_x, thumb_y), mask_th)
-                # thin border around thumb
                 border_layer = Image.new('RGBA', (W,H), (0,0,0,0))
                 bd = ImageDraw.Draw(border_layer)
                 bd.rounded_rectangle(
@@ -728,7 +708,6 @@ elif preset == 'pro_ranking':
 
         text_start_x = thumb_x + THUMB_W + 14
 
-        # ── Rank number circle badge ─────────────────────────────────
         badge_r = 28 if is_active else 22
         badge_cx = text_start_x + badge_r
         badge_cy = cy_row + row_h // 2
@@ -750,7 +729,6 @@ elif preset == 'pro_ranking':
         ny   = badge_cy - nh//2 - nb[1]
         draw_text_with_outline(ImageDraw.Draw(img), nx, ny, num_str, num_font_use, (255,255,255,255))
 
-        # ── Rank title text ──────────────────────────────────────────
         ttl_font_use = pro_act_ttl_font if is_active else pro_ttl_font
         ttl_x = badge_cx + badge_r + 14
         ttl_max_w = W - ROW_PAD_X - ttl_x - 12
@@ -794,12 +772,13 @@ function computeRankForIndex(index, total, ranking) {
   return ranking?.direction === 'countdown' ? (total - index) : (index + 1);
 }
 
-// Extract first frame from a video as JPEG thumbnail
+// Extract first frame from a video as JPEG thumbnail (FIXED: added -update 1 for FFmpeg 5.x)
 async function extractThumbnail(videoPath, outJpg, jobLog) {
   try {
     await runFFmpeg([
       '-i', videoPath,
       '-vframes', '1',
+      '-update', '1',
       '-vf', `scale=${Math.round(VIDEO_W * 0.22)}:-1`,
       '-q:v', '3',
       outJpg,
@@ -830,7 +809,6 @@ async function addRankingOverlay(inputPath, outputPath, rankingItem, jobLog) {
     });
 
     if (isPro) {
-      // cinematic zoom in: 1 sec zoompan 1.08x → 1.0x then normal
       await runFFmpeg([
         '-i', inputPath,
         '-i', overlayPng,
@@ -1057,3 +1035,4 @@ async function mergeVideos({ videoFiles, sourcesMeta = [], workDir, jobId, headi
 }
 
 module.exports = { mergeVideos, convertTo916, addHeading, addRankingOverlay };
+```
