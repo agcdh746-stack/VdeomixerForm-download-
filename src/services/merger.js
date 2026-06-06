@@ -509,36 +509,6 @@ if preset == 'current_badge':
         for line in lines:
             draw_text_with_emoji(draw, 165, ty, line, badge_title_font, badge_emoji_font, white, use_outline=True)
             ty += 56
-else:
-    list_top = title_bottom_y + 14
-    start_y = list_top + (110 if total_ranks <= 5 else 90)
-    gap = 75 if total_ranks <= 5 else 60
-    
-    tmp_measure = Image.new('RGBA', (200, 100))
-    tmp_d = ImageDraw.Draw(tmp_measure)
-    max_num_w = 0
-    for r in range(1, total_ranks + 1):
-        f_ = active_num_font if r == current_rank else num_font
-        bb_ = tmp_d.textbbox((0, 0), f'{r}.', font=f_)
-        max_num_w = max(max_num_w, bb_[2] - bb_[0])
-    num_x = 32
-    title_x = num_x + max_num_w + 16
-
-    for rank in range(1, total_ranks + 1):
-        y = start_y + (rank - 1) * gap
-        is_active = rank == current_rank
-        font = active_num_font if is_active else num_font
-        color_idx = (rank - 1) % len(list_colors)
-        num_fill = list_colors[color_idx]
-        
-        draw_text_with_emoji(draw, num_x, y, f'{rank}.', font, emoji_font, num_fill, use_outline=True)
-        if is_active and title:
-            lines = wrap_text_px(title, active_title_font, W - title_x - 16)[:2]
-            ty = y + 15
-            for line in lines:
-                draw_text_with_emoji(draw, title_x, ty, line, active_title_font, emoji_font, white, use_outline=True)
-                ty += 40
-
 elif preset == 'pro_ranking':
     # ── Pro Ranking Overlay ──────────────────────────────────────────
     # thumbnail_paths: list of image paths, one per rank (may be empty strings)
@@ -764,6 +734,36 @@ elif preset == 'pro_ranking':
                 ty_ttl += ttl_lh
 
         cy_row += row_h + GAP
+
+else:
+    list_top = title_bottom_y + 14
+    start_y = list_top + (110 if total_ranks <= 5 else 90)
+    gap = 75 if total_ranks <= 5 else 60
+
+    tmp_measure = Image.new('RGBA', (200, 100))
+    tmp_d = ImageDraw.Draw(tmp_measure)
+    max_num_w = 0
+    for r in range(1, total_ranks + 1):
+        f_ = active_num_font if r == current_rank else num_font
+        bb_ = tmp_d.textbbox((0, 0), f'{r}.', font=f_)
+        max_num_w = max(max_num_w, bb_[2] - bb_[0])
+    num_x = 32
+    title_x = num_x + max_num_w + 16
+
+    for rank in range(1, total_ranks + 1):
+        y = start_y + (rank - 1) * gap
+        is_active = rank == current_rank
+        font = active_num_font if is_active else num_font
+        color_idx = (rank - 1) % len(list_colors)
+        num_fill = list_colors[color_idx]
+
+        draw_text_with_emoji(draw, num_x, y, f'{rank}.', font, emoji_font, num_fill, use_outline=True)
+        if is_active and title:
+            lines = wrap_text_px(title, active_title_font, W - title_x - 16)[:2]
+            ty = y + 15
+            for line in lines:
+                draw_text_with_emoji(draw, title_x, ty, line, active_title_font, emoji_font, white, use_outline=True)
+                ty += 40
 
 img.save(cfg['out'])
 print('OK')
