@@ -218,7 +218,9 @@ async function addHeading(inputPath, outputPath, heading, jobLog) {
 
   try {
     // heading opts from UI
-    const showBg      = heading?.showBg !== false;  // default true
+    const showBg      = heading?.showBg === true;  // default false — only show if explicitly enabled
+    const fgHex       = heading?.color || null;
+    const fgColor     = fgHex ? hexToRgba(fgHex) : [255, 255, 255, 255];
     const accentHex   = heading?.accentColor || null;
     const accentColor = accentHex ? hexToRgba(accentHex) : null;
 
@@ -233,12 +235,13 @@ async function addHeading(inputPath, outputPath, heading, jobLog) {
       paddingY: 18,
       lineHeightRatio: 1.22,
       outPath: titlePng,
-      fg: [255, 255, 255, 255],
-      bg: [0, 0, 0, 145],
-      shadow: showBg ? [0, 0, 0, 180, 2, 2] : null,
+      fg: fgColor,
+      bg: showBg ? [0, 0, 0, 145] : [0, 0, 0, 0],
+      shadow: showBg ? [0, 0, 0, 180, 2, 2] : [0, 0, 0, 160, 2, 2],
       fontWeight: 'bold',
       showBg,
       accentColor,
+      emojiFont: pickEmojiFont(),
     });
 
     await runFFmpeg([
