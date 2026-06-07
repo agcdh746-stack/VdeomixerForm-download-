@@ -140,24 +140,25 @@ def is_emoji(ch):
         return False
 
 def render_emoji_to_img(seq, target_h, emoji_font_obj):
-    try:
-        kwargs = {'embedded_color': True} if hasattr(ImageFont, 'Layout') else {}
-        tmp_d = ImageDraw.Draw(Image.new('RGBA',(10,10)))
-        bb = tmp_d.textbbox((0,0), seq, font=emoji_font_obj, **kwargs)
-
-        ew = max(1, bb[2]-bb[0])
-        eh = max(1, bb[3]-bb[1])
-        tmp_e = Image.new('RGBA', (ew + 20, eh + 20), (0,0,0,0))
-        de = ImageDraw.Draw(tmp_e)
-        de.text((-bb[0]+10, -bb[1]+10), seq, font=emoji_font_obj, **kwargs)
-
-        scale = target_h / max(1, eh)
-        new_w = max(1, int(ew * scale))
-        new_h = max(1, int(target_h))
-        resample = Image.Resampling.LANCZOS if hasattr(Image, 'Resampling') else Image.LANCZOS
-        return tmp_e.resize((new_w + 20, new_h + 20), resample), new_w
-    except:
-        return None, 0
+    for use_ec in [True, False]:
+        try:
+            kwargs = {'embedded_color': True} if use_ec else {}
+            tmp_d = ImageDraw.Draw(Image.new('RGBA',(10,10)))
+            bb = tmp_d.textbbox((0,0), seq, font=emoji_font_obj, **kwargs)
+            ew = max(1, bb[2]-bb[0])
+            eh = max(1, bb[3]-bb[1])
+            if ew < 2 or eh < 2:
+                continue
+            tmp_e = Image.new('RGBA', (ew + 20, eh + 20), (0,0,0,0))
+            de = ImageDraw.Draw(tmp_e)
+            de.text((-bb[0]+10, -bb[1]+10), seq, font=emoji_font_obj, **kwargs)
+            scale = target_h / max(1, eh)
+            new_w = max(1, int(ew * scale))
+            resample = Image.Resampling.LANCZOS if hasattr(Image, 'Resampling') else Image.LANCZOS
+            return tmp_e.resize((new_w + 20, int(target_h) + 20), resample), new_w
+        except:
+            continue
+    return None, 0
 
 def has_emoji(text):
     return any(is_emoji(c) for c in text)
