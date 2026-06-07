@@ -58,13 +58,9 @@ def _detect_layout(fp):
     if raqm is None:
         return basic
     try:
-        f = ImageFont.truetype(fp, 20, layout_engine=raqm)
-        tmp = Image.new('RGBA', (200, 40))
-        d   = ImageDraw.Draw(tmp)
-        bb  = d.textbbox((0, 0), '\u09ac\u09be\u0982\u09b2\u09be', font=f)
-        if bb[2] - bb[0] < 120:
-            return raqm
-        return basic
+        # Just test if raqm engine loads successfully — don't check width
+        ImageFont.truetype(fp, 20, layout_engine=raqm)
+        return raqm
     except:
         return basic
 
@@ -163,50 +159,76 @@ def render_emoji_to_img(seq, target_h, emoji_font_obj):
     except:
         return None, 0
 
+def has_emoji(text):
+    return any(is_emoji(c) for c in text)
+
 def draw_text_with_emoji(draw, x, y, text, main_font, emoji_font, fill, shadow=None):
+    # If no emoji at all, draw the whole line at once (best for Bengali shaping)
+    if not emoji_font or not has_emoji(text):
+        if shadow:
+            sr, sg, sb, sa, sox, soy = shadow
+            draw.text((x + sox, y + soy), text, font=main_font, fill=(sr, sg, sb, sa))
+        draw.text((x, y), text, font=main_font, fill=fill)
+        return
+
+    # Has emoji: split into runs of (text_segment, is_emoji_seq)
     try:
         sample_bb = draw.textbbox((0,0), 'A', font=main_font)
         target_h = max(16, sample_bb[3] - sample_bb[1])
     except:
         target_h = 32
 
-    cx = x
+    # Build runs
+    runs = []
     i = 0
     while i < len(text):
         ch = text[i]
-        seq = ch
-        j = i + 1
-        while j < len(text) and text[j] in ('\uFE0F', '\u200D'):
-            seq += text[j]
-            j += 1
-        if j < len(text) and is_emoji(text[j]) and '\u200D' in seq:
-            while j < len(text) and (text[j] in ('\uFE0F', '\u200D') or is_emoji(text[j])):
-                seq += text[j]
+        if is_emoji(ch):
+            seq = ch
+            j = i + 1
+            while j < len(text) and text[j] in ('\uFE0F', '\u200D'):
+                seq += text[j]; j += 1
+            if j < len(text) and is_emoji(text[j]) and '\u200D' in seq:
+                while j < len(text) and (text[j] in ('\uFE0F','\u200D') or is_emoji(text[j])):
+                    seq += text[j]; j += 1
+            runs.append((seq, True)); i = j
+        else:
+            j = i + 1
+            while j < len(text) and not is_emoji(text[j]):
                 j += 1
-        use_emoji = emoji_font and any(is_emoji(c) for c in seq)
-        if use_emoji:
-            emoji_img, ew = render_emoji_to_img(seq, target_h, emoji_font)
+            runs.append((text[i:j], False)); i = j
+
+    # Measure each run to get x positions, then draw
+    # First pass: measure widths
+    run_widths = []
+    for seg, is_emj in runs:
+        if is_emj:
+            _, ew = render_emoji_to_img(seg, target_h, emoji_font)
+            run_widths.append(ew + 4)
+        else:
+            bb = draw.textbbox((0,0), seg, font=main_font)
+            run_widths.append(bb[2] - bb[0])
+
+    # Second pass: draw
+    cx = x
+    for (seg, is_emj), rw in zip(runs, run_widths):
+        if is_emj:
+            emoji_img, ew = render_emoji_to_img(seg, target_h, emoji_font)
             if emoji_img:
-                paste_x = int(cx)
-                paste_y = int(y - 4)
+                paste_x = int(cx); paste_y = int(y - 4)
                 if shadow:
                     sr, sg, sb, sa, sox, soy = shadow
-                    r, g, b, a_ch = emoji_img.split()
-                    shadow_layer = Image.new('RGBA', emoji_img.size, (0,0,0,0))
-                    shadow_layer.paste((sr, sg, sb, sa), mask=a_ch)
-                    img.paste(shadow_layer, (paste_x + sox, paste_y + soy), shadow_layer)
+                    r2, g2, b2, a_ch = emoji_img.split()
+                    sl = Image.new('RGBA', emoji_img.size, (0,0,0,0))
+                    sl.paste((sr,sg,sb,sa), mask=a_ch)
+                    img.paste(sl, (paste_x+sox, paste_y+soy), sl)
                 img.paste(emoji_img, (paste_x, paste_y), emoji_img)
-                cx += ew + 4
-                i = j
-                continue
-        # Regular text
-        if shadow:
-            sr, sg, sb, sa, sox, soy = shadow
-            draw.text((cx + sox, y + soy), seq, font=main_font, fill=(sr, sg, sb, sa))
-        draw.text((cx, y), seq, font=main_font, fill=fill)
-        bb = draw.textbbox((0, 0), seq, font=main_font)
-        cx += bb[2] - bb[0] + 1
-        i = j
+        else:
+            if shadow:
+                sr, sg, sb, sa, sox, soy = shadow
+                draw.text((cx+sox, y+soy), seg, font=main_font, fill=(sr,sg,sb,sa))
+            draw.text((cx, y), seg, font=main_font, fill=fill)
+        cx += rw
 
 # Load emoji font
 emoji_font = None
