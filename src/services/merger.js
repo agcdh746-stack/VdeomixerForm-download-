@@ -13,6 +13,20 @@ const fs    = require('fs');
 const https = require('https');
 const { renderTitlePng } = require('./titleRenderer');
 
+const DATA_DIR_M        = process.env.DATA_DIR || '/app/data';
+const SOUNDS_DIR_M      = path.join(DATA_DIR_M, 'sounds');
+const SOUNDS_META_FILE_M = path.join(DATA_DIR_M, 'sounds-meta.json');
+
+function getSelectedSound() {
+  try {
+    if (!fs.existsSync(SOUNDS_META_FILE_M)) return null;
+    const meta = JSON.parse(fs.readFileSync(SOUNDS_META_FILE_M, 'utf8'));
+    if (!meta.selected) return null;
+    const filePath = path.join(SOUNDS_DIR_M, meta.selected);
+    return fs.existsSync(filePath) ? filePath : null;
+  } catch(_) { return null; }
+}
+
 function hexToRgba(hex) {
   try {
     hex = hex.replace('#', '');
@@ -888,9 +902,26 @@ function getVideoDuration(filePath) {
 }
 
 // ─── Step 3: Concat all clips with fade-to-black transition ───────
-async function concatClips(clipPaths, outputPath, jobLog) {
+async function concatClips(clipPaths, outputPath, jobLog, useTransition = false) {
   if (clipPaths.length === 1) {
     fs.copyFileSync(clipPaths[0], outputPath);
+    return;
+  }
+
+  // If transition not requested, use simple concat directly
+  if (!useTransition) {
+    const concatFile = outputPath + '.concat.txt';
+    fs.writeFileSync(concatFile, clipPaths.map(p => `file '${p.replace(/'/g, "'\\''")}'`).join('\n'));
+    await runFFmpeg([
+      '-f', 'concat', '-safe', '0',
+      '-i', concatFile,
+      '-c:v', 'libx264', '-preset', PRESET, '-crf', CRF,
+      '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac', '-b:a', '128k',
+      '-movflags', '+faststart',
+      outputPath,
+    ], jobLog, null);
+    try { fs.unlinkSync(concatFile); } catch (_) {}
     return;
   }
 
@@ -962,6 +993,51 @@ async function concatClips(clipPaths, outputPath, jobLog) {
     ], jobLog, null);
 
     jobLog.info('✅ xfade transition applied successfully');
+
+    // Mix transition sound effect if selected
+    const soundFile = getSelectedSound();
+    if (soundFile) {
+      jobLog.info('🔊 Mixing transition sound...');
+      const soundedPath = outputPath + '_sounded.mp4';
+      try {
+        // Get total video duration for sound timing
+        const totalDur = durations.reduce((a, b) => a + b, 0);
+        // Build amix filter: original audio + sound at each transition point
+        let soundInputs = ['-i', outputPath, '-i', soundFile];
+        let soundFilter = '[0:a]';
+        // For each transition point, adelay the sound
+        let soundParts = ['[0:a]'];
+        let soundLabels = [];
+        let offset2 = 0;
+        for (let i = 1; i < clipPaths.length; i++) {
+          offset2 += durations[i-1] - FADE_DUR;
+          const delayMs = Math.round(offset2 * 1000);
+          const sLabel = `[s${i}]`;
+          soundParts.push(`[1:a]adelay=${delayMs}|${delayMs}${sLabel}`);
+          soundLabels.push(sLabel);
+        }
+        const allAudio = ['[0:a]', ...soundLabels];
+        soundParts.push(`${allAudio.join('')}amix=inputs=${allAudio.length}:normalize=0[amixed]`);
+
+        await runFFmpeg([
+          '-i', outputPath,
+          '-i', soundFile,
+          '-filter_complex', soundParts.join(';'),
+          '-map', '0:v',
+          '-map', '[amixed]',
+          '-c:v', 'copy',
+          '-c:a', 'aac', '-b:a', '128k',
+          '-shortest',
+          soundedPath,
+        ], jobLog, null);
+
+        fs.renameSync(soundedPath, outputPath);
+        jobLog.info('✅ Transition sound mixed in');
+      } catch(se) {
+        jobLog.warn('⚠️ Sound mix failed: ' + se.message);
+        try { if (fs.existsSync(soundedPath)) fs.unlinkSync(soundedPath); } catch(_) {}
+      }
+    }
 
   } catch (err) {
     // Fallback: simple concat demuxer
@@ -1049,7 +1125,7 @@ async function applyAudio(inputPath, outputPath, audioOpts, workDir, jobLog) {
 }
 
 // ─── Main merge pipeline ──────────────────────────────────────────
-async function mergeVideos({ videoFiles, sourcesMeta = [], workDir, jobId, heading, ranking, audioOpts, jobLog, speeds = [] }) {
+async function mergeVideos({ videoFiles, sourcesMeta = [], workDir, jobId, heading, ranking, audioOpts, jobLog, speeds = [], enableTransition = false }) {
   fs.mkdirSync(workDir, { recursive: true });
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 
@@ -1107,7 +1183,9 @@ async function mergeVideos({ videoFiles, sourcesMeta = [], workDir, jobId, headi
 
   const concatPath = path.join(workDir, 'concat.mp4');
   jobLog.info(`🔗 Concatenating ${headedPaths.length} clips...`);
-  await concatClips(headedPaths, concatPath, jobLog);
+  const isPro = ranking && ranking.enabled && ranking.preset === 'pro_ranking';
+  const useTransition = enableTransition && !isPro;
+  await concatClips(headedPaths, concatPath, jobLog, useTransition);
   progress();
 
   const timestamp = Date.now();
