@@ -310,13 +310,8 @@ def _detect_layout(fp):
     if raqm is None:
         return basic
     try:
-        f = ImageFont.truetype(fp, 20, layout_engine=raqm)
-        tmp = Image.new('RGBA', (200, 40))
-        d   = ImageDraw.Draw(tmp)
-        bb  = d.textbbox((0, 0), '\u09ac\u09be\u0982\u09b2\u09be', font=f)
-        if bb[2] - bb[0] < 120:
-            return raqm
-        return basic
+        ImageFont.truetype(fp, 20, layout_engine=raqm)
+        return raqm
     except Exception:
         return basic
 
@@ -394,40 +389,57 @@ def draw_text_with_outline(draw, cx, y, seq, font, fill):
                 draw.text((cx + dx, y + dy), seq, font=font, fill=(0, 0, 0, 255))
     draw.text((cx, y), seq, font=font, fill=fill)
 
+def has_emoji(text):
+    return any(is_emoji(c) for c in text)
+
 def draw_text_with_emoji(draw, x, y, text, main_font, emoji_font_obj, fill, use_outline=True):
+    # No emoji — draw whole text at once (correct Bengali shaping)
+    if not emoji_font_obj or not has_emoji(text):
+        if use_outline:
+            draw_text_with_outline(draw, x, y, text, main_font, fill)
+        else:
+            draw.text((x, y), text, font=main_font, fill=fill)
+        return
+
     try:
         sample_bb = draw.textbbox((0,0), 'A', font=main_font)
         target_h = max(16, sample_bb[3] - sample_bb[1])
     except Exception:
         target_h = 32
-    cx = x
+
+    # Build runs of (segment, is_emoji)
+    runs = []
     i = 0
     while i < len(text):
         ch = text[i]
-        seq = ch
-        j = i + 1
-        while j < len(text) and text[j] in ('\uFE0F', '\u200D'):
-            seq += text[j]
-            j += 1
-        if j < len(text) and is_emoji(text[j]) and '\u200D' in seq:
-            while j < len(text) and (text[j] in ('\uFE0F', '\u200D') or is_emoji(text[j])):
-                seq += text[j]
+        if is_emoji(ch):
+            seq = ch; j = i + 1
+            while j < len(text) and text[j] in ('\uFE0F', '\u200D'):
+                seq += text[j]; j += 1
+            if j < len(text) and is_emoji(text[j]) and '\u200D' in seq:
+                while j < len(text) and (text[j] in ('\uFE0F','\u200D') or is_emoji(text[j])):
+                    seq += text[j]; j += 1
+            runs.append((seq, True)); i = j
+        else:
+            j = i + 1
+            while j < len(text) and not is_emoji(text[j]):
                 j += 1
-        use_emoji = emoji_font_obj and any(is_emoji(c) for c in seq)
-        if use_emoji:
-            emoji_img, ew = render_emoji_to_img(seq, target_h, emoji_font_obj)
+            runs.append((text[i:j], False)); i = j
+
+    cx = x
+    for seg, is_emj in runs:
+        if is_emj:
+            emoji_img, ew = render_emoji_to_img(seg, target_h, emoji_font_obj)
             if emoji_img:
                 draw._image.paste(emoji_img, (int(cx), int(y-4)), emoji_img)
                 cx += ew + 4
-                i = j
-                continue
-        if use_outline:
-            draw_text_with_outline(draw, cx, y, seq, main_font, fill)
         else:
-            draw.text((cx, y), seq, font=main_font, fill=fill)
-        bb = draw.textbbox((0, 0), seq, font=main_font)
-        cx += bb[2] - bb[0] + 1
-        i = j
+            if use_outline:
+                draw_text_with_outline(draw, cx, y, seg, main_font, fill)
+            else:
+                draw.text((cx, y), seg, font=main_font, fill=fill)
+            bb = draw.textbbox((0,0), seg, font=main_font)
+            cx += bb[2] - bb[0]
 
 def wrap_text_px(text, font, max_w):
     tmp_img = Image.new('RGBA', (max_w * 2 + 100, 100))
